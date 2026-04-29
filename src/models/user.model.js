@@ -20,10 +20,9 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "password should contain more than 6 characters"],
       select: false, //pw un queries mein nahi aayega jab tak hum usse bol nahi rahe ki tum aao--simply by default pw nahi aayega.
     },
-    system: {
+    system: { // This can be updated in mongoDB
       type: Boolean,
       default: false,
-      immutable: true,
       select: false,
     },
   },
