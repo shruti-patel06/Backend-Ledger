@@ -12,15 +12,42 @@ async function createAccountController(req, res) {
 }
 
 // Get all accounts of the logged in user
-async function getUserAccountController(req, res) {
+async function getUserAccountsController(req, res) {
+
   const user = req.user;
+
   const accounts = await accountModel.find({ user: user._id });
+
   res.status(200).json({
     accounts,
   });
 }
 
+// Get Balance of a particular Account
+async function getAccountBalanceController(req,res){
+  const { accountId }= req.params;
+  //Jo user balance nikal ne ki koshish kar raha hai check karo ki kya vo usi user ka account hai
+  const account = await accountModel.findOne({ //Dusre user ka Account nahi dekh sakte
+    _id : accountId,
+    user :req.user._id
+  })
+
+if(!account){
+  return res.status(404).json({
+    message:"Account not found"
+  })
+}
+
+const balance = await account.getBalance();
+
+res.status(200).json({
+  accountId : account._id,
+  balance : balance
+})
+}
+
 module.exports = {
   createAccountController,
-  getUserAccountController,
+  getUserAccountsController,
+  getAccountBalanceController
 };
