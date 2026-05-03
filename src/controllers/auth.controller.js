@@ -1,8 +1,9 @@
 const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service");
+const tokenBlacklistModel = require("../models/blacklist.model")
 /**
- * - user register controller
+ * - User register controller
  *  -POST /api/auth/register
  */
 async function userRegisterController(req, res) {
@@ -43,7 +44,7 @@ async function userRegisterController(req, res) {
  * -POST /api/auth/login
  *
  */
-async function userLogincontroller(req, res) {
+async function userLoginController(req, res) {
   const { email, password } = req.body;
 
   const user = await userModel.findOne({ email }).select("+password");
@@ -79,7 +80,35 @@ async function userLogincontroller(req, res) {
     token,
   });
 }
+/** 
+ * - User Logout controller
+ * -POST /api/auth/logout
+*/
+async function userLogoutController(req,res){
+  const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
+
+  if(!token){// Agar token nahi hai toh iska matlab user is already logged out
+    return res.status(400).json({ // status code could be 200 coz if the user is already logged out 
+      message:"User logged out successfully"
+    })
+  }
+
+  //clearing the token
+  res.cookie("token","");
+  // TTL is three days here - gets deleted after that, saves db storage after that
+  await tokenBlacklistModel.create({
+    token: token
+  })
+
+  res.clearCookie("token");
+
+  res.status(200).json({
+    message : "User logged out successfully"
+  })
+}
+
 module.exports = {
   userRegisterController,
-  userLogincontroller,
+  userLoginController,
+  userLogoutController
 };

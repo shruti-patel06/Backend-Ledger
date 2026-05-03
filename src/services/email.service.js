@@ -67,7 +67,7 @@ async function sendTransactionEmail(userEmail,name,amount,toAccount){
       const subject = "Transaction Successful !";
       const text = `
               Hello ${name},
-              Your Transaction of ${amount} to account ${toAccount} is Successful"
+              Your Transaction of ${amount} to account ${toAccount} is Successful
               `
       const html = `
               <p>Hello ${name},</p>
