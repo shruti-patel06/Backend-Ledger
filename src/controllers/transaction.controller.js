@@ -103,7 +103,7 @@ async function createTransaction(req, res) {
       session.startTransaction(); //Commits the currently active transaction in this session.
       // //Agar iske baad agar kuch bhi karte ho toh - ya toh sab kuch complete hoga ya kuch bhi complete nahi hoga
 
-      const transaction = (await transactionModel.create([
+      transaction = (await transactionModel.create([
         {
           fromAccount,
           toAccount,
@@ -130,17 +130,18 @@ async function createTransaction(req, res) {
         })()
       //7. Create CREDIT ledger entry
 
-      const creditLedgerEntry = await ledgerModel.create(
+      const creditLedgerEntry = await ledgerModel.create([
         {
           account: toAccount,
           amount: amount,
           transaction: transaction._id,
           type: "CREDIT",
-        },{ session });
+        }],{ session });
 
+        // To avoid the conflict
         await transactionModel.findOneAndUpdate(
           { _id: transaction._id },
-          { status:"COMPLETED "},
+          { status:"COMPLETED"},
           { session }
         )
 
@@ -155,7 +156,7 @@ async function createTransaction(req, res) {
       
     }
     catch(error){
-      await res.session.abortTransaction();
+      await session.abortTransaction();
       return res.status(400).json({
         message : "Transaction is Pending due to some issues, Please retry after sometime",
       })
@@ -270,7 +271,9 @@ async function createFundsTransaction(req, res) {
         message: "Initial funds transaction completed successfully",
         transaction: transaction,
       });
-    } catch (error) {
+    } 
+    catch (error) {
+
       await session.abortTransaction();
       console.error("Error in createFundsTransaction:", error);
       return res.status(500).json({

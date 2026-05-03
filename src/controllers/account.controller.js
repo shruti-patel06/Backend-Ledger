@@ -28,7 +28,7 @@ async function getAccountBalanceController(req,res){
   const { accountId }= req.params;
   //Jo user balance nikal ne ki koshish kar raha hai check karo ki kya vo usi user ka account hai
   const account = await accountModel.findOne({ //Dusre user ka Account nahi dekh sakte
-    _id : accountId,
+    _id : accountId.trim(),
     user :req.user._id
   })
 
