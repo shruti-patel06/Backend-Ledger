@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard · Backend Ledger</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Backend Ledger</h1>
+    <div class="topbar-right">
+      <span id="welcome"></span>
+      <button id="logout-btn" class="secondary">Log out</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="card">
+      <div class="card-header">
+        <h2>Your Accounts</h2>
+        <button id="create-account-btn">+ New Account</button>
+      </div>
+      <p class="msg" id="create-account-msg"></p>
+      <ul class="accounts-list" id="accounts-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Transfer Money</h2>
+      <form id="transfer-form">
+        <label for="fromAccount">From (your account)</label>
+        <select id="fromAccount" required></select>
+
+        <label for="toAccount">To (recipient account ID)</label>
+        <input type="text" id="toAccount" required placeholder="Paste a recipient's account ID" />
+
+        <label for="amount">Amount</label>
+        <input type="number" id="amount" min="0" step="0.01" required />
+
+        <button type="submit">Send</button>
+        <p class="msg" id="transfer-msg"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Seed Initial Funds</h2>
+      <p class="subtitle">Only works for a user with system privileges — see DEPLOY.md.</p>
+      <form id="seed-form">
+        <label for="seedToAccount">To (account ID)</label>
+        <input type="text" id="seedToAccount" required placeholder="Account ID to fund" />
+
+        <label for="seedAmount">Amount</label>
+        <input type="number" id="seedAmount" min="0" step="0.01" required />
+
+        <button type="submit">Seed Funds</button>
+        <p class="msg" id="seed-msg"></p>
+      </form>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script>
+    loadDashboard();
+    document.getElementById("logout-btn").addEventListener("click", handleLogout);
+    document.getElementById("create-account-btn").addEventListener("click", handleCreateAccount);
+    document.getElementById("transfer-form").addEventListener("submit", handleTransfer);
+    document.getElementById("seed-form").addEventListener("submit", handleSeedFunds);
+  </script>
+</body>
+</html>

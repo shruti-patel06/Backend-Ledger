@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in · Backend Ledger</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="auth-page">
+    <form class="card" id="login-form">
+      <h1>Backend Ledger</h1>
+      <p class="subtitle">Log in to your account</p>
+
+      <label for="email">Email</label>
+      <input type="email" id="email" required autocomplete="email" />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password" />
+
+      <p class="error" id="error"></p>
+      <button type="submit">Log in</button>
+      <p class="switch">No account? <a href="register.html">Register</a></p>
+    </form>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    requireGuest();
+    document.getElementById("login-form").addEventListener("submit", handleLogin);
+  </script>
+</body>
+</html>

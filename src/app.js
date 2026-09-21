@@ -1,10 +1,16 @@
 const express = require("express")
 const cookieParser = require("cookie-parser")
+const cors = require("cors")
 
 //Creating express instance
 const app = express();
 
 //Middlewares
+// CLIENT_URL locks CORS to the deployed frontend; falls back to reflecting
+// any origin (still no cookies/credentials involved, auth uses a bearer token)
+app.use(cors({
+  origin: process.env.CLIENT_URL || true,
+}));
 app.use(express.json());
 app.use(cookieParser());
 
