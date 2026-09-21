@@ -2,6 +2,14 @@ const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service");
 const tokenBlacklistModel = require("../models/blacklist.model")
+
+// httpOnly stops the token being read by JS (XSS), sameSite=strict blocks cross-site sends (CSRF),
+// secure is on only in production since local dev usually isn't served over HTTPS
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "strict",
+  secure: process.env.NODE_ENV === "production",
+};
 /**
  * - User register controller
  *  -POST /api/auth/register
@@ -26,7 +34,7 @@ async function userRegisterController(req, res) {
   const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
     expiresIn: "3d",
   });
-  res.cookie("token", token);
+  res.cookie("token", token, COOKIE_OPTIONS);
   res.status(201).json({
     message: "User created successfully",
     user: {
@@ -69,7 +77,7 @@ async function userLoginController(req, res) {
   const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
     expiresIn: "3d",
   });
-  res.cookie("token", token);
+  res.cookie("token", token, COOKIE_OPTIONS);
   res.status(200).json({
     message: "User logged in successfully",
     user: {
@@ -88,19 +96,17 @@ async function userLogoutController(req,res){
   const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
 
   if(!token){// Agar token nahi hai toh iska matlab user is already logged out
-    return res.status(400).json({ // status code could be 200 coz if the user is already logged out 
+    return res.status(200).json({
       message:"User logged out successfully"
     })
   }
 
-  //clearing the token
-  res.cookie("token","");
   // TTL is three days here - gets deleted after that, saves db storage after that
   await tokenBlacklistModel.create({
     token: token
   })
 
-  res.clearCookie("token");
+  res.clearCookie("token", COOKIE_OPTIONS);
 
   res.status(200).json({
     message : "User logged out successfully"

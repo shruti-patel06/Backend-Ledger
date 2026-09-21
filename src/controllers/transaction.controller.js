@@ -30,9 +30,10 @@ async function createTransaction(req, res) {
     }
 
 
-    // If the accounts exist
+    // If the accounts exist - fromAccount must belong to the logged in user
     const fromUserAccount = await accountModel.findOne({
       _id: fromAccount,
+      user: req.user._id,
     });
 
     const toUserAccount = await accountModel.findOne({
@@ -124,10 +125,6 @@ async function createTransaction(req, res) {
         }],
         { session });
 
-
-        await (()=>{
-          return new Promise((resolve)=> setTimeout(resolve, 15 *1000));
-        })()
       //7. Create CREDIT ledger entry
 
       const creditLedgerEntry = await ledgerModel.create([
