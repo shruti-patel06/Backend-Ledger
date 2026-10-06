@@ -15,6 +15,7 @@ Built with an Express + MongoDB API and a plain HTML/CSS/JS frontend (no build s
 - **Parallel transfers can't overdraw an account.** See [Concurrency](#concurrency-and-the-race-demo).
 - **Money enters the system in one place.** A system ("Treasury") user issues initial funds, and its account goes negative by exactly the amount issued, so it always mirrors the total money in the system.
 - **Logout really logs out.** Tokens are JWTs backed by a blacklist, so a token is rejected after logout.
+- **Pages update live.** When someone pays you, your balance and history change on their own, with no refresh. See [Live updates](#live-updates).
 
 ## Tech stack
 
@@ -29,9 +30,9 @@ src/
   config/db.js             MongoDB connection
   models/                  user, account, ledger, transaction, token blacklist
   controllers/             auth, account, transaction logic
-  routes/                  auth, account, transaction routes
+  routes/                  auth, account, transaction, live-event routes
   middlewares/             JWT auth + system-user check
-  services/                email service, system (Treasury) user bootstrap
+  services/                email, system (Treasury) user bootstrap, live-update broadcaster
 client/
   pages/                   login, register, dashboard, history, privacy
   js/ css/                 frontend code and styles
@@ -106,10 +107,20 @@ New accounts start at ₹0. Money only enters through the Treasury user.
 2. Copy each account's ID with **Copy ID**.
 3. Log in as the **Treasury** user (the `SYSTEM_USER_EMAIL` and `SYSTEM_USER_PASSWORD` from your `.env`). Only Treasury sees the **Issue funds** card. Issue ₹1,000 to **Alice's account ID**.
    - Don't send it to Treasury's own account. That nets to zero.
-4. Log in as Alice and send some money to Bob's account ID. Bob's balance updates.
+4. Log in as Alice and send some money to Bob's account ID. If Bob's dashboard is open in the other window, his balance changes by itself and a "Received" message appears.
 5. Try sending more than Alice has. You get a "Not enough balance" error.
 6. Open **History** for month-by-month sent/received totals. Click a row for details.
 7. Back on Treasury's dashboard, its balance is negative by exactly the amount issued.
+
+## Live updates
+
+Dashboards and the History page update the moment a transfer involving you commits, so there's no refreshing during a demo. Look for the green **Live** indicator in the navbar. It turns red if the connection drops, and the page catches up automatically when it reconnects.
+
+- **How it works.** Each open page keeps one `GET /api/events` connection open ([Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)). After a transfer commits, the server sends a small event to the sender and the recipient only. The page reacts by reloading its own data, so an event never carries the other person's account details.
+- **Who sees what.** The recipient gets a "Received ₹X from Name" message and the changed balance briefly highlights. The sender's other tabs update quietly.
+- **Why not `EventSource` or WebSockets.** Updates only go server to browser, so SSE is enough and needs no extra package. The browser uses `fetch` to read the stream because `EventSource` can't send the `Authorization` header, and putting the token in the URL would leak it into logs.
+- **Security.** The stream needs a valid login token, and logging out closes it. A revoked token can't open a new one.
+- **Limit.** Connections are held in the server's memory, which is right for a single server instance such as Render's free tier. Running several instances would need a shared channel such as Redis pub/sub.
 
 ## Concurrency and the race demo
 
@@ -196,6 +207,12 @@ Authenticated routes take `Authorization: Bearer <token>` (the token is returned
 | GET | `/api/transactions/summary` | Sent/received totals per month. Query: `tz` (IANA timezone), `accountId` |
 | POST | `/api/transactions/system/initial-funds` | **Treasury only.** Body: `toAccount`, `amount`, `idempotencyKey` |
 
+### Live updates
+
+| Method | Route | Notes |
+|---|---|---|
+| GET | `/api/events` | Server-Sent Events stream (`text/event-stream`). Events: `ready` on connect, and `transaction` when a transfer involving the user commits, with `direction` (`CREDIT`, `DEBIT` or `SELF`), `amount`, `accountId` (the user's own account), `counterpartyName` and `transactionId`. Needs a valid token |
+
 Errors are JSON: `{ "message": "..." }` with 400 (bad input, insufficient balance, inactive account), 401 (missing/invalid/revoked token), 403 (not the system user), 404, or 409 (idempotency conflict).
 
 History uses cursor pagination, so pages stay fast and don't skip or repeat items when new transfers arrive.
@@ -208,5 +225,6 @@ The backend and frontend deploy separately:
 - **Frontend (Vercel):** import the repo, set **Root Directory** to `client`, and use the "Other" preset (there is no build step). Set the deployed backend URL in `client/js/config.js`.
 - Once the frontend is live, set `CLIENT_URL` on the backend to its URL to restrict CORS.
 - Email may not work on free hosting tiers that block SMTP. Transfers still succeed; only the notification fails.
+- Live updates: the server sends a keep-alive ping every 25 seconds so idle connections aren't closed, and the browser reconnects on its own if one drops. It hasn't been tested on Render yet, so check the Live indicator there before a demo.
 
 

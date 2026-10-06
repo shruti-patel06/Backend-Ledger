@@ -18,6 +18,7 @@ app.use(cookieParser());
 const authRouter = require("./routes/auth.routes");
 const accountRouter = require("./routes/account.routes");
 const transactionRoutes = require("./routes/transaction.routes");
+const eventsRouter = require("./routes/events.routes");
 
 app.get("/",(req,res)=>{
         res.send(" Ledger Service is Up and running ");
@@ -26,6 +27,7 @@ app.get("/",(req,res)=>{
 app.use("/api/auth",authRouter);
 app.use("/api/accounts",accountRouter)
 app.use("/api/transactions",transactionRoutes)
+app.use("/api/events",eventsRouter)
 
 // No route matched above
 app.use((req, res) => {

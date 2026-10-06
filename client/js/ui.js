@@ -7,6 +7,8 @@ function requireAuth() {
 }
 
 function handleLogout() {
+  // Close the live-update stream first so it doesn't try to reconnect with a revoked token
+  if (typeof stopRealtime === "function") stopRealtime();
   apiRequest("/api/auth/logout", { method: "POST" })
     .catch(() => {})
     .finally(() => {
@@ -53,6 +55,22 @@ function setLoading(button, loading, loadingText) {
   }
 }
 
+// Small message that appears at the bottom of the screen and fades after a few seconds.
+// Announced to screen readers (role="status"), never steals focus.
+function showToast(text, type) {
+  let container = document.getElementById("toasts");
+  if (!container) {
+    container = el("div", "toasts");
+    container.id = "toasts";
+    container.setAttribute("role", "status");
+    container.setAttribute("aria-live", "polite");
+    document.body.append(container);
+  }
+  const toast = el("div", `toast ${type || ""}`, text);
+  container.append(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
 async function copyText(text, button) {
   const original = button.textContent;
   try {
@@ -94,6 +112,21 @@ function renderNavbar(active) {
 
   const right = document.createElement("div");
   right.className = "nav-right";
+
+  // Connection state of the live-update stream; stays hidden until startRealtime() sets it
+  const live = document.createElement("span");
+  live.id = "live-status";
+  live.className = "live-badge";
+  live.hidden = true;
+  live.dataset.state = "connecting";
+  const liveDot = document.createElement("span");
+  liveDot.className = "live-dot";
+  liveDot.setAttribute("aria-hidden", "true");
+  const liveText = document.createElement("span");
+  liveText.className = "live-text";
+  live.append(liveDot, liveText);
+  right.append(live);
+
   if (user) {
     const name = document.createElement("span");
     name.textContent = user.system ? `${user.name} (Treasury)` : user.name;

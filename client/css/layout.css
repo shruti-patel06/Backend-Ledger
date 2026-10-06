@@ -52,6 +52,42 @@
   color: var(--text-muted);
 }
 
+/* Live-update connection state: green dot when connected, grey otherwise */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.live-badge[hidden] {
+  display: none;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.live-badge[data-state="live"] {
+  color: var(--success);
+}
+
+.live-badge[data-state="live"] .live-dot {
+  background: var(--success);
+}
+
+.live-badge[data-state="offline"] {
+  color: var(--error);
+}
+
+.live-badge[data-state="offline"] .live-dot {
+  background: var(--error);
+}
+
 /* ---- Layout ---- */
 
 .page {

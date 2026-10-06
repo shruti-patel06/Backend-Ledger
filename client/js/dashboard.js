@@ -2,6 +2,7 @@ const ACCOUNT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 let accounts = [];
 let balances = {}; // accountId -> number, or null if it couldn't be loaded
+let transferInFlight = false;
 
 async function loadDashboard() {
   requireAuth();
@@ -24,10 +25,54 @@ async function loadDashboard() {
   document.getElementById("fromAccount").addEventListener("change", updateAvailableHint);
 
   await refreshAll();
+
+  startRealtime({
+    onTransaction: handleLiveTransaction,
+    onResync: scheduleRefresh,
+  });
 }
 
 function refreshAll() {
   return Promise.all([refreshAccounts(), refreshRecent()]);
+}
+
+// ---- Live updates ----
+
+let refreshTimer = null;
+let refreshing = false;
+let refreshQueued = false;
+
+// Several events can arrive together (e.g. 10 parallel transfers). Wait a moment so they
+// share one reload, and never run two reloads at once.
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(runScheduledRefresh, 250);
+}
+
+async function runScheduledRefresh() {
+  if (refreshing) {
+    refreshQueued = true;
+    return;
+  }
+  refreshing = true;
+  try {
+    await refreshAll();
+  } finally {
+    refreshing = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      scheduleRefresh();
+    }
+  }
+}
+
+function handleLiveTransaction(event) {
+  // Only announce money coming in. For a transfer you made, this page already
+  // showed its own success message (and other tabs just refresh quietly).
+  if (event.direction === "CREDIT") {
+    showToast(`Received ${formatMoney(event.amount)} from ${event.counterpartyName}`, "success");
+  }
+  scheduleRefresh();
 }
 
 function displayBalance(balance, currency) {
@@ -36,6 +81,7 @@ function displayBalance(balance, currency) {
 
 async function refreshAccounts() {
   const listEl = document.getElementById("accounts-list");
+  const previousBalances = balances;
   try {
     ({ accounts } = await apiRequest("/api/accounts"));
     const results = await Promise.all(
@@ -48,11 +94,17 @@ async function refreshAccounts() {
     return;
   }
 
-  renderAccounts();
+  // Accounts whose balance changed since the last load (not new ones) get a brief highlight
+  const changed = new Set(
+    accounts
+      .filter((acc) => acc._id in previousBalances && previousBalances[acc._id] !== balances[acc._id])
+      .map((acc) => acc._id),
+  );
+  renderAccounts(changed);
   renderFromOptions();
 }
 
-function renderAccounts() {
+function renderAccounts(changed = new Set()) {
   const listEl = document.getElementById("accounts-list");
   listEl.textContent = "";
 
@@ -74,7 +126,10 @@ function renderAccounts() {
     meta.append(copy);
     info.append(meta);
 
-    card.append(info, el("div", "account-balance", displayBalance(balances[acc._id], acc.currency)));
+    card.append(
+      info,
+      el("div", changed.has(acc._id) ? "account-balance flash" : "account-balance", displayBalance(balances[acc._id], acc.currency)),
+    );
     listEl.append(card);
   }
 }
@@ -93,7 +148,8 @@ function renderFromOptions() {
 
   const hasAccounts = accounts.length > 0;
   document.querySelectorAll("#transfer-form input, #transfer-form select, #transfer-btn").forEach((node) => {
-    node.disabled = !hasAccounts;
+    // A live refresh can land mid-transfer; it must not re-enable Send and allow a double submit
+    node.disabled = !hasAccounts || (node.id === "transfer-btn" && transferInFlight);
   });
   updateAvailableHint();
 }
@@ -188,6 +244,7 @@ async function handleTransfer(event) {
   const toAccount = toInput.value.trim();
   const amount = Number(amountInput.value);
   setLoading(button, true, "Sending...");
+  transferInFlight = true;
   try {
     await apiRequest("/api/transactions", {
       method: "POST",
@@ -200,6 +257,7 @@ async function handleTransfer(event) {
   } catch (err) {
     setMessage("transfer-msg", err.message, "error");
   } finally {
+    transferInFlight = false;
     setLoading(button, false);
   }
 }

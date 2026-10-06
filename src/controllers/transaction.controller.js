@@ -2,6 +2,7 @@ const transactionModel = require("../models/transaction.model");
 const ledgerModel = require("../models/ledger.model");
 const accountModel = require("../models/account.model");
 const emailService = require("../services/email.service");
+const realtime = require("../services/realtime.service");
 const mongoose = require("mongoose");
 
 // Thrown inside a MongoDB transaction to abort it and send this status + message to the client
@@ -49,9 +50,10 @@ async function createTransaction(req, res) {
       user: req.user._id,
     });
 
+    // Recipient's name is only needed for the live-update event sent after the transfer
     const toUserAccount = await accountModel.findOne({
       _id: toAccount,
-    });
+    }).populate("user", "name");
     if (!fromUserAccount || !toUserAccount) {
       return res.status(400).json({
         message: "Invalid fromAccount or toAccount",
@@ -200,6 +202,13 @@ async function createTransaction(req, res) {
       session.endSession();
     }
 
+    // Committed - tell both sides so their pages update without a refresh
+    realtime.publishTransfer(
+      transaction,
+      { userId: req.user._id, accountId: fromUserAccount._id, name: req.user.name },
+      { userId: toUserAccount.user?._id, accountId: toUserAccount._id, name: toUserAccount.user?.name },
+    );
+
     res.status(201).json({
       message: "Transaction completed successfully",
       transaction: transaction,
@@ -270,7 +279,7 @@ async function createFundsTransaction(req, res) {
 
     const toUserAccount = await accountModel.findOne({
       _id: toAccount,
-    });
+    }).populate("user", "name");
     if (!toUserAccount) {
       return res.status(400).json({
         message: "Invalid toAccount",
@@ -331,6 +340,12 @@ async function createFundsTransaction(req, res) {
         transaction.status = "COMPLETED";
         await transaction.save({ session });
       });
+
+      realtime.publishTransfer(
+        transaction,
+        { userId: req.user._id, accountId: fromUserAccount._id, name: req.user.name },
+        { userId: toUserAccount.user?._id, accountId: toUserAccount._id, name: toUserAccount.user?.name },
+      );
 
       return res.status(201).json({
         message: "Initial funds transaction completed successfully",

@@ -19,6 +19,38 @@ async function loadHistoryPage() {
     return;
   }
   await reloadHistory();
+
+  startRealtime({
+    onTransaction: scheduleHistoryReload,
+    onResync: scheduleHistoryReload,
+  });
+}
+
+// Live updates: several events can arrive together, so wait a moment and reload once
+let historyTimer = null;
+let historyReloading = false;
+let historyReloadQueued = false;
+
+function scheduleHistoryReload() {
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(runScheduledHistoryReload, 250);
+}
+
+async function runScheduledHistoryReload() {
+  if (historyReloading) {
+    historyReloadQueued = true;
+    return;
+  }
+  historyReloading = true;
+  try {
+    await reloadHistory({ quiet: true });
+  } finally {
+    historyReloading = false;
+    if (historyReloadQueued) {
+      historyReloadQueued = false;
+      scheduleHistoryReload();
+    }
+  }
 }
 
 function renderAccountFilter(accounts) {
@@ -44,29 +76,45 @@ function renderAccountFilter(accounts) {
   }
 }
 
-async function reloadHistory() {
+// quiet: used by live updates - keep the current list on screen until the new data has
+// arrived, then swap it in, instead of flashing "Loading..."
+async function reloadHistory({ quiet = false } = {}) {
   const listEl = document.getElementById("history-list");
   const errorEl = document.getElementById("history-error");
-  errorEl.textContent = "";
-  listEl.textContent = "";
-  document.getElementById("history-empty").hidden = true;
-  document.getElementById("load-more").hidden = true;
-  listEl.append(el("p", "tx-empty", "Loading your transactions..."));
+  if (!quiet) {
+    errorEl.textContent = "";
+    listEl.textContent = "";
+    document.getElementById("history-empty").hidden = true;
+    document.getElementById("load-more").hidden = true;
+    listEl.append(el("p", "tx-empty", "Loading your transactions..."));
+  }
 
   try {
     // Month totals are computed server-side in the viewer's timezone
     const tz = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    const { months } = await apiRequest(`/api/transactions/summary?tz=${tz}${accountQuery()}`);
+    const [{ months }, firstPage] = await Promise.all([
+      apiRequest(`/api/transactions/summary?tz=${tz}${accountQuery()}`),
+      apiRequest(`/api/transactions?limit=${PAGE_SIZE}${accountQuery()}`),
+    ]);
     const summaries = Object.fromEntries(months.map((m) => [m.month, m]));
 
+    errorEl.textContent = "";
     renderer = createTxListRenderer(listEl, { summaries });
     renderer.reset();
-    nextCursor = null;
-    await loadNextPage();
+    showPage(firstPage, true);
   } catch (err) {
+    // A failed background refresh keeps the list that is already on screen
+    if (quiet) return;
     listEl.textContent = "";
     errorEl.textContent = err.message;
   }
+}
+
+function showPage(data, isFirstPage) {
+  renderer.append(data.transactions);
+  nextCursor = data.nextCursor;
+  document.getElementById("history-empty").hidden = !(isFirstPage && data.transactions.length === 0);
+  document.getElementById("load-more").hidden = !nextCursor;
 }
 
 async function loadNextPage() {
@@ -77,12 +125,7 @@ async function loadNextPage() {
   try {
     const cursor = nextCursor ? `&before=${encodeURIComponent(nextCursor)}` : "";
     const data = await apiRequest(`/api/transactions?limit=${PAGE_SIZE}${cursor}${accountQuery()}`);
-    renderer.append(data.transactions);
-    nextCursor = data.nextCursor;
-
-    const isFirstPage = !cursor;
-    document.getElementById("history-empty").hidden = !(isFirstPage && data.transactions.length === 0);
-    loadMoreBtn.hidden = !nextCursor;
+    showPage(data, !cursor);
   } catch (err) {
     errorEl.textContent = err.message;
   } finally {

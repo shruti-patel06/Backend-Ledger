@@ -2,6 +2,7 @@ const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service");
 const tokenBlacklistModel = require("../models/blacklist.model")
+const realtime = require("../services/realtime.service");
 const { getTokenFromRequest } = require("../middlewares/auth.middleware");
 
 // httpOnly stops the token being read by JS (XSS), sameSite=strict blocks cross-site sends (CSRF),
@@ -130,6 +131,7 @@ async function userLogoutController(req,res){
   )
 
   res.clearCookie("token", COOKIE_OPTIONS);
+  realtime.closeByToken(token); // a revoked token must not keep its live-update stream
 
   res.status(200).json({
     message : "User logged out successfully"
