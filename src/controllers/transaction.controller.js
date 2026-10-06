@@ -4,18 +4,25 @@ const accountModel = require("../models/account.model");
 const emailService = require("../services/email.service");
 const mongoose = require("mongoose");
 
+// Thrown inside a MongoDB transaction to abort it and send this status + message to the client
+function transferError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
 /**
  * - Create a new transaction
  * THE 10-STEP TRANSFER FLOW:
  * 1. Validate request
  * 2. Validate idempotency key
  * 3. Check account status
- * 4. Derive sender balance from ledger
- * 5. Create transaction (PENDING)
- * 6. Create DEBIT ledger entry
- * 7. Create CREDIT ledger entry
- * 8. Mark transaction COMPLETED
- * 9. Commit MongoDB session
+ * 4. Start MongoDB transaction (retried automatically on a write conflict)
+ * 5. Lock the sender account
+ * 6. Derive sender balance from ledger - inside the transaction, after the lock
+ * 7. Create transaction (PENDING)
+ * 8. Create DEBIT and CREDIT ledger entries
+ * 9. Mark transaction COMPLETED and commit
  * 10. Send email notification
  */
 
@@ -26,6 +33,12 @@ async function createTransaction(req, res) {
     if (!fromAccount || !toAccount || !amount || !idempotencyKey) {
       return res.status(400).json({
         message: "fromAccount, toAccount, amount and idempotencyKey are required",
+      });
+    }
+    // A string like "100" would slip through the balance comparison by coercion
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        message: "amount must be a number greater than zero",
       });
     }
 
@@ -90,71 +103,81 @@ async function createTransaction(req, res) {
       });
     }
 
-    //4. Derive sender balance from ledger
-    const balance = await fromUserAccount.getBalance(); // -->method in account.models
-    if (balance < amount) {
-      return res.status(400).json({
-        message: `Insufficient balance. Current balance is ${balance}. Requested amount is ${amount}`,
-      });
-    }
-
-    //5. Create a Transaction (PENDING)
-    //creating a session
-
     let transaction;
     const session = await mongoose.startSession();
 
     try {
+      //4. Start the MongoDB transaction
+      // Agar iske baad agar kuch bhi karte ho toh - ya toh sab kuch complete hoga ya kuch bhi complete nahi hoga.
+      // withTransaction re-runs this whole callback if MongoDB reports a write conflict
+      // (another transfer from the same account got there first) and commits at the end
+      await session.withTransaction(async () => {
 
-      
-      session.startTransaction(); //Commits the currently active transaction in this session.
-      // //Agar iske baad agar kuch bhi karte ho toh - ya toh sab kuch complete hoga ya kuch bhi complete nahi hoga
+        //5. Lock the sender account - see lockVersion in account.model.
+        // Also re-checks ACTIVE in case the account was frozen after step 3
+        const lockedFromAccount = await accountModel.findOneAndUpdate(
+          { _id: fromUserAccount._id, status: "ACTIVE" },
+          { $inc: { lockVersion: 1 } },
+          { session },
+        );
+        if (!lockedFromAccount) {
+          throw transferError(400, "Both From and To account must be ACTIVE to process Transaction");
+        }
 
-      transaction = (await transactionModel.create([
-        {
-          fromAccount,
-          toAccount,
-          amount,
-          idempotencyKey,
-          status: "PENDING",
-        }],
-        { session }))[0];
-      
-      //6. Create DEBIT ledger entry
+        //6. Derive sender balance from ledger - read after the lock, so no other transfer
+        // from this account can commit between this check and our DEBIT
+        const balance = await lockedFromAccount.getBalance(session); // -->method in account.models
+        if (balance < amount) {
+          throw transferError(
+            400,
+            `Insufficient balance. Current balance is ${balance}. Requested amount is ${amount}`,
+          );
+        }
 
-      const debitLedgerEntry = await ledgerModel.create([
-        {
-          account: fromAccount,
-          amount: amount,
-          transaction: transaction._id,
-          type: "DEBIT",
-        }],
-        { session });
+        //7. Create a Transaction (PENDING)
+        transaction = (await transactionModel.create([
+          {
+            fromAccount,
+            toAccount,
+            amount,
+            idempotencyKey,
+            status: "PENDING",
+          }],
+          { session }))[0];
 
-      //7. Create CREDIT ledger entry
+        //8. Create DEBIT and CREDIT ledger entries
 
-      const creditLedgerEntry = await ledgerModel.create([
-        {
-          account: toAccount,
-          amount: amount,
-          transaction: transaction._id,
-          type: "CREDIT",
-        }],{ session });
+        await ledgerModel.create([
+          {
+            account: fromAccount,
+            amount: amount,
+            transaction: transaction._id,
+            type: "DEBIT",
+          }],
+          { session });
 
-      //8. Mark transaction COMPLETED
+        await ledgerModel.create([
+          {
+            account: toAccount,
+            amount: amount,
+            transaction: transaction._id,
+            type: "CREDIT",
+          }],{ session });
 
-      transaction.status = "COMPLETED";
-      await transaction.save({ session });
+        //9. Mark transaction COMPLETED - withTransaction commits once this callback returns
 
-      //9. Commit MongoDB session
-
-      await session.commitTransaction();
-      
+        transaction.status = "COMPLETED";
+        await transaction.save({ session });
+      });
     }
     catch(error){
-      // Abort rolls back everything, including the PENDING transaction document,
-      // so nothing was persisted and no funds moved
-      await session.abortTransaction();
+      // withTransaction has already aborted, rolling back everything including the
+      // PENDING transaction document, so nothing was persisted and no funds moved
+      if (error.status) {
+        return res.status(error.status).json({
+          message: error.message,
+        });
+      }
 
       // A concurrent request with the same idempotencyKey won the race to insert
       if (error.code === 11000) {
@@ -213,6 +236,11 @@ async function createFundsTransaction(req, res) {
         message: "toAccount, amount, and idempotencyKey are required",
       });
     }
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        message: "amount must be a number greater than zero",
+      });
+    }
 
     // Funds come out of the system user's ACTIVE account (it is allowed to go negative -
     // this is where money enters the ledger)
@@ -254,55 +282,63 @@ async function createFundsTransaction(req, res) {
       });
     }
 
+    let transaction;
     const session = await mongoose.startSession();
     try {
-      session.startTransaction();
+      // Same pattern as createTransaction: retried on a write conflict, committed at the end
+      await session.withTransaction(async () => {
 
-      // Created on the client side so not using await here and not creating it directly on the database
+        // The system account may go negative so there is no balance check, but it still
+        // takes the lock so every transfer debiting an account is applied one at a time
+        await accountModel.updateOne(
+          { _id: fromUserAccount._id },
+          { $inc: { lockVersion: 1 } },
+          { session },
+        );
 
-      const transaction = new transactionModel(
-        {
-          fromAccount: fromUserAccount._id,
-          toAccount,
-          amount,
-          idempotencyKey,
-          status: "PENDING",
-        }
-      );
+        // Created on the client side so not using await here and not creating it directly on the database
 
-      // When using session data will be in the array of objects format so use []
-      const debitLedgerEntry = await ledgerModel.create([
-        {
-          account: fromUserAccount._id,
-          amount:amount,
-          transaction: transaction._id,
-          type: "DEBIT",
-        }],
-        { session }
-      );
-      const creditLedgerEntry = await ledgerModel.create([
-        {
-          account: toAccount,
-          amount: amount,
-          transaction: transaction._id,
-          type: "CREDIT",
-        }],
-        { session }
-      );
+        transaction = new transactionModel(
+          {
+            fromAccount: fromUserAccount._id,
+            toAccount,
+            amount,
+            idempotencyKey,
+            status: "PENDING",
+          }
+        );
 
-      transaction.status = "COMPLETED";
-      await transaction.save({ session });
+        // When using session data will be in the array of objects format so use []
+        await ledgerModel.create([
+          {
+            account: fromUserAccount._id,
+            amount:amount,
+            transaction: transaction._id,
+            type: "DEBIT",
+          }],
+          { session }
+        );
+        await ledgerModel.create([
+          {
+            account: toAccount,
+            amount: amount,
+            transaction: transaction._id,
+            type: "CREDIT",
+          }],
+          { session }
+        );
 
-      await session.commitTransaction();
+        transaction.status = "COMPLETED";
+        await transaction.save({ session });
+      });
 
       return res.status(201).json({
         message: "Initial funds transaction completed successfully",
         transaction: transaction,
       });
-    } 
+    }
     catch (error) {
-
-      await session.abortTransaction();
+      // withTransaction has already aborted - nothing was persisted
       if (error.code === 11000) {
         return res.status(409).json({
           message: "A transaction with this idempotencyKey is already being processed",

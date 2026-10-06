@@ -27,6 +27,15 @@ const accountSchema = new mongoose.Schema(
       select: false,
     },
     // User Balance never stored in database but cache - use Ledger
+
+    // Not money - a counter bumped inside every transfer that debits this account.
+    // Two transfers from the same account both write this document, so MongoDB
+    // aborts one with a write conflict and it retries after the other commits
+    lockVersion: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -34,8 +43,10 @@ const accountSchema = new mongoose.Schema(
 );
 accountSchema.index({ user: 1, status: 1 }); // compound index- can be found using  user and status
 
-accountSchema.methods.getBalance = async function(){
-   const balanceData = await ledgerModel.aggregate([   
+// Pass the session when calling inside a transaction so the balance is read from
+// the transaction's snapshot, not from outside it
+accountSchema.methods.getBalance = async function(session = null){
+   const balanceData = await ledgerModel.aggregate([
       {$match:{account :this._id}},
       //grps debits and credits
       {
@@ -71,7 +82,7 @@ accountSchema.methods.getBalance = async function(){
             }
           }
       }
-   ])
+   ]).session(session)
    // if user creates this for the first time
    if(balanceData.length === 0){
     return 0 
