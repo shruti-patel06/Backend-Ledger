@@ -2,6 +2,7 @@ const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const emailService = require("../services/email.service");
 const tokenBlacklistModel = require("../models/blacklist.model")
+const { getTokenFromRequest } = require("../middlewares/auth.middleware");
 
 // httpOnly stops the token being read by JS (XSS), sameSite=strict blocks cross-site sends (CSRF),
 // secure is on only in production since local dev usually isn't served over HTTPS
@@ -10,12 +11,24 @@ const COOKIE_OPTIONS = {
   sameSite: "strict",
   secure: process.env.NODE_ENV === "production",
 };
+
+// The schema stores emails trimmed + lowercased, so lookups must normalize the same way.
+// Non-strings are rejected so an object like { "$ne": null } can't be used as a query operator.
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : null;
+}
 /**
  * - User register controller
  *  -POST /api/auth/register
  */
 async function userRegisterController(req, res) {
-  const { email, password, name } = req.body;
+  const { password, name } = req.body;
+  const email = normalizeEmail(req.body.email);
+  if (!email || typeof password !== "string") {
+    return res.status(400).json({
+      message: "Email and password are required",
+    });
+  }
   const isExists = await userModel.findOne({
     email: email,
   });
@@ -53,9 +66,15 @@ async function userRegisterController(req, res) {
  *
  */
 async function userLoginController(req, res) {
-  const { email, password } = req.body;
+  const { password } = req.body;
+  const email = normalizeEmail(req.body.email);
+  if (!email || typeof password !== "string") {
+    return res.status(400).json({
+      message: "Email and password are required",
+    });
+  }
 
-  const user = await userModel.findOne({ email }).select("+password");
+  const user = await userModel.findOne({ email }).select("+password +system");
   if (!user) {
     return res.status(401).json({
       message: "Email or password is INVALID",
@@ -84,6 +103,7 @@ async function userLoginController(req, res) {
       _id: user._id,
       email: user.email,
       name: user.name,
+      system: user.system, // lets the frontend show the system-only "Seed Initial Funds" card
     },
     token,
   });
@@ -93,7 +113,7 @@ async function userLoginController(req, res) {
  * -POST /api/auth/logout
 */
 async function userLogoutController(req,res){
-  const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
+  const token = getTokenFromRequest(req);
 
   if(!token){// Agar token nahi hai toh iska matlab user is already logged out
     return res.status(200).json({
@@ -102,9 +122,12 @@ async function userLogoutController(req,res){
   }
 
   // TTL is three days here - gets deleted after that, saves db storage after that
-  await tokenBlacklistModel.create({
-    token: token
-  })
+  // Upsert so logging out with an already-blacklisted token is a no-op, not a duplicate-key error
+  await tokenBlacklistModel.updateOne(
+    { token: token },
+    { $setOnInsert: { token: token } },
+    { upsert: true },
+  )
 
   res.clearCookie("token", COOKIE_OPTIONS);
 

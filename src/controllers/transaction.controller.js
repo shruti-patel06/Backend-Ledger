@@ -51,6 +51,12 @@ async function createTransaction(req, res) {
     });
     // Agar transaction complete hogayi aur req dusri baar aayi hai toh ye message snd karo
     if (isTransactionAlreadyExists) {
+      // Key belongs to someone else's transfer - don't leak its details
+      if (!isTransactionAlreadyExists.fromAccount.equals(fromUserAccount._id)) {
+        return res.status(409).json({
+          message: "idempotencyKey has already been used for a different transaction",
+        });
+      }
       if (isTransactionAlreadyExists.status === "COMPLETED") {
         return res.status(200).json({
           message: "Transaction is already processed",
@@ -135,13 +141,6 @@ async function createTransaction(req, res) {
           type: "CREDIT",
         }],{ session });
 
-        // To avoid the conflict
-        await transactionModel.findOneAndUpdate(
-          { _id: transaction._id },
-          { status:"COMPLETED"},
-          { session }
-        )
-
       //8. Mark transaction COMPLETED
 
       transaction.status = "COMPLETED";
@@ -153,29 +152,49 @@ async function createTransaction(req, res) {
       
     }
     catch(error){
+      // Abort rolls back everything, including the PENDING transaction document,
+      // so nothing was persisted and no funds moved
       await session.abortTransaction();
-      return res.status(400).json({
-        message : "Transaction is Pending due to some issues, Please retry after sometime",
+
+      // A concurrent request with the same idempotencyKey won the race to insert
+      if (error.code === 11000) {
+        return res.status(409).json({
+          message: "A transaction with this idempotencyKey is already being processed",
+        });
+      }
+      if (error.name === "ValidationError") {
+        return res.status(400).json({
+          message: "Transaction failed validation, no funds were moved",
+          errors: Object.values(error.errors).map((e) => e.message),
+        });
+      }
+      console.error("Error in createTransaction:", error);
+      return res.status(500).json({
+        message: "Transaction failed, no funds were moved. Please retry",
       })
     }
     finally{
       session.endSession();
     }
 
-    //10.send email notification
-    await emailService.sendTransactionEmail(
-      req.user.email,
-      req.user.name,
-      amount,
-      toAccount._id,
-    );
-    return res.status(201).json({
+    res.status(201).json({
       message: "Transaction completed successfully",
       transaction: transaction,
     })
 
+    //10.send email notification - after response to reduce user waiting time
+    await emailService.sendTransactionEmail(
+      req.user.email,
+      req.user.name,
+      amount,
+      toUserAccount._id,
+    );
+
   } catch (error) {
     console.error("Error in createTransaction:", error);
+    if (res.headersSent) {
+      return;
+    }
     return res.status(500).json({
       message: "Internal server error",
       error: error.message,
@@ -195,9 +214,26 @@ async function createFundsTransaction(req, res) {
       });
     }
 
+    // Funds come out of the system user's ACTIVE account (it is allowed to go negative -
+    // this is where money enters the ledger)
+    const fromUserAccount = await accountModel.findOne({
+      user: req.user._id,
+      status: "ACTIVE",
+    });
+    if (!fromUserAccount) {
+      return res.status(400).json({
+        message: "System User account not found",
+      });
+    }
+
     // Check for existing transaction with the same idempotencyKey
     const existingTransaction = await transactionModel.findOne({ idempotencyKey });
     if (existingTransaction) {
+      if (!existingTransaction.fromAccount.equals(fromUserAccount._id)) {
+        return res.status(409).json({
+          message: "idempotencyKey has already been used for a different transaction",
+        });
+      }
       return res.status(200).json({
         message: "Transaction already processed",
         transaction: existingTransaction,
@@ -212,14 +248,9 @@ async function createFundsTransaction(req, res) {
         message: "Invalid toAccount",
       });
     }
-
-    const fromUserAccount = await accountModel.findOne({
-      
-      user: req.user._id,
-    });
-    if (!fromUserAccount) {
+    if (toUserAccount.status !== "ACTIVE") {
       return res.status(400).json({
-        message: "System User account not found",
+        message: "toAccount must be ACTIVE to receive funds",
       });
     }
 
@@ -272,6 +303,11 @@ async function createFundsTransaction(req, res) {
     catch (error) {
 
       await session.abortTransaction();
+      if (error.code === 11000) {
+        return res.status(409).json({
+          message: "A transaction with this idempotencyKey is already being processed",
+        });
+      }
       console.error("Error in createFundsTransaction:", error);
       return res.status(500).json({
         message: "Transaction failed",
@@ -283,7 +319,164 @@ async function createFundsTransaction(req, res) {
   }
   
 
+/**
+ * - Resolve the logged in user's account ids, optionally narrowed to one account
+ * - Returns null if accountId is given but doesn't belong to the user
+ */
+async function getMyAccountIds(req) {
+  const filter = { user: req.user._id };
+  if (req.query.accountId) {
+    filter._id = req.query.accountId;
+  }
+  const accounts = await accountModel.find(filter).select("_id");
+  if (req.query.accountId && accounts.length === 0) {
+    return null;
+  }
+  return accounts.map((acc) => acc._id);
+}
+
+// Cursor = "<createdAt ISO>_<_id>" of the last item on the previous page.
+// _id breaks ties between transactions created in the same millisecond.
+function encodeCursor(transaction) {
+  return `${transaction.createdAt.toISOString()}_${transaction._id}`;
+}
+function decodeCursor(cursor) {
+  const [iso, id] = String(cursor).split("_");
+  const createdAt = new Date(iso);
+  if (isNaN(createdAt) || !mongoose.isValidObjectId(id)) {
+    return null;
+  }
+  return { createdAt, _id: new mongoose.Types.ObjectId(id) };
+}
+
+/**
+ * - Transaction history of the logged in user, newest first
+ * - GET /api/transactions?limit=20&before=<cursor>&accountId=<id>
+ * - Cursor pagination instead of skip/offset: stays fast and doesn't skip or
+ *   repeat items when new transactions arrive between pages
+ */
+async function getTransactionHistory(req, res) {
+  const myIds = await getMyAccountIds(req);
+  if (!myIds) {
+    return res.status(404).json({ message: "Account not found" });
+  }
+  if (myIds.length === 0) {
+    return res.status(200).json({ transactions: [], nextCursor: null });
+  }
+
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+
+  const conditions = [
+    { $or: [{ fromAccount: { $in: myIds } }, { toAccount: { $in: myIds } }] },
+  ];
+  if (req.query.before) {
+    const cursor = decodeCursor(req.query.before);
+    if (!cursor) {
+      return res.status(400).json({ message: "Invalid cursor" });
+    }
+    conditions.push({
+      $or: [
+        { createdAt: { $lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, _id: { $lt: cursor._id } },
+      ],
+    });
+  }
+
+  // Fetch one extra to know whether another page exists
+  const docs = await transactionModel
+    .find({ $and: conditions })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .populate([
+      { path: "fromAccount", select: "user", populate: { path: "user", select: "name" } },
+      { path: "toAccount", select: "user", populate: { path: "user", select: "name" } },
+    ]);
+
+  const hasMore = docs.length > limit;
+  const page = hasMore ? docs.slice(0, limit) : docs;
+  const isMine = (account) => !!account && myIds.some((id) => id.equals(account._id));
+
+  const transactions = page.map((tx) => {
+    const fromMine = isMine(tx.fromAccount);
+    const toMine = isMine(tx.toAccount);
+    // Direction is relative to the logged in user, not stored on the transaction
+    const direction = fromMine && toMine ? "SELF" : fromMine ? "DEBIT" : "CREDIT";
+    const mySide = direction === "CREDIT" ? tx.toAccount : tx.fromAccount;
+    const otherSide = direction === "CREDIT" ? tx.fromAccount : tx.toAccount;
+    return {
+      _id: tx._id,
+      amount: tx.amount,
+      status: tx.status,
+      createdAt: tx.createdAt,
+      direction,
+      account: mySide._id,
+      counterparty: {
+        accountId: otherSide?._id || null,
+        name: otherSide?.user?.name || "Unknown user",
+        // True when filtered to one account and the other side is another of the user's own accounts
+        isOwnAccount: !!otherSide?.user?._id?.equals(req.user._id),
+      },
+    };
+  });
+
+  res.status(200).json({
+    transactions,
+    nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
+  });
+}
+
+/**
+ * - Money sent / received per month, for the history page's month headers
+ * - GET /api/transactions/summary?tz=Asia/Kolkata&accountId=<id>
+ * - Grouped in the client's timezone so a transfer at 1am IST on the 1st
+ *   lands in the right month (UTC would put it in the previous one)
+ */
+async function getTransactionSummary(req, res) {
+  const myIds = await getMyAccountIds(req);
+  if (!myIds) {
+    return res.status(404).json({ message: "Account not found" });
+  }
+
+  let timezone = "UTC";
+  if (req.query.tz) {
+    try {
+      // Throws RangeError for anything that isn't a real IANA timezone
+      new Intl.DateTimeFormat("en", { timeZone: req.query.tz });
+      timezone = req.query.tz;
+    } catch {
+      return res.status(400).json({ message: "Invalid timezone" });
+    }
+  }
+
+  const fromMine = { $in: ["$fromAccount", myIds] };
+  const toMine = { $in: ["$toAccount", myIds] };
+
+  const months = await transactionModel.aggregate([
+    {
+      $match: {
+        status: "COMPLETED",
+        $or: [{ fromAccount: { $in: myIds } }, { toAccount: { $in: myIds } }],
+      },
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m", date: "$createdAt", timezone } },
+        // Transfers between the user's own accounts are neither sent nor received
+        sent: { $sum: { $cond: [{ $and: [fromMine, { $not: [toMine] }] }, "$amount", 0] } },
+        received: { $sum: { $cond: [{ $and: [toMine, { $not: [fromMine] }] }, "$amount", 0] } },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { _id: -1 } },
+    { $project: { _id: 0, month: "$_id", sent: 1, received: 1, count: 1 } },
+  ]);
+
+  res.status(200).json({ months });
+}
+
 module.exports = {
   createTransaction,
   createFundsTransaction,
+  getTransactionHistory,
+  getTransactionSummary,
 }

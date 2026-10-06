@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy · Backend Ledger</title>
+  <script src="../js/theme.js"></script>
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/privacy.css" />
+</head>
+<body>
+  <header class="navbar">
+    <div class="navbar-inner">
+      <a href="../index.html" class="brand">Backend Ledger</a>
+      <div class="nav-right" id="nav-right"></div>
+    </div>
+  </header>
+
+  <main class="page">
+    <article class="card prose">
+    <h1>Privacy Policy</h1>
+    <p class="muted">Last updated: October 2026</p>
+
+    <p>
+      Backend Ledger is a personal portfolio project demonstrating a double-entry
+      ledger. It is not a real bank and holds no real money.
+    </p>
+
+    <h2>What we store</h2>
+    <ul>
+      <li>Your name and email address, used to log in and identify your account.</li>
+      <li>Your password, stored only as a one-way bcrypt hash.</li>
+      <li>Your ledger accounts and the demo transactions you make.</li>
+    </ul>
+
+    <h2>How it is used</h2>
+    <p>
+      Your email address is used to send a welcome email when you register and a
+      notification when you make a transfer. These emails are sent through Gmail
+      using the Gmail API, which is used only to send these notifications &mdash;
+      no mailbox contents are read or stored.
+    </p>
+
+    <h2>Sharing</h2>
+    <p>
+      Your data is not sold or shared with anyone. It is stored in MongoDB Atlas
+      and processed by the app's hosting providers (Render and Vercel) only to run
+      the service.
+    </p>
+
+    <h2>Deleting your data</h2>
+    <p>
+      To have your account and data deleted, open an issue on the project's
+      <a href="https://github.com/shruti-patel06/Backend-Ledger">GitHub repository</a>.
+    </p>
+
+    <p><a href="../index.html">&larr; Back to Backend Ledger</a></p>
+    </article>
+  </main>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/ui.js"></script>
+  <script>
+    document.getElementById("nav-right").append(themeToggleButton());
+  </script>
+</body>
+</html>

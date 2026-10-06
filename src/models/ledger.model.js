@@ -36,12 +36,33 @@ function preventLedgerModification() {
     "Ledger Entries are immutable and canot be modified or deleted",
   );
 }
-ledgerSchema.pre("findOneAndUpdate", preventLedgerModification);
-ledgerSchema.pre("updateOne", preventLedgerModification);
-ledgerSchema.pre("deleteOne", preventLedgerModification);
-ledgerSchema.pre("remove", preventLedgerModification);
-ledgerSchema.pre("findOneAndDelete", preventLedgerModification);
-ledgerSchema.pre("findOneAndReplace", preventLedgerModification);
+// Query middleware: Model.updateOne(), Model.deleteMany(), etc.
+ledgerSchema.pre(
+  [
+    "findOneAndUpdate",
+    "findOneAndDelete",
+    "findOneAndReplace",
+    "updateOne",
+    "updateMany",
+    "replaceOne",
+    "deleteOne",
+    "deleteMany",
+  ],
+  { query: true, document: false },
+  preventLedgerModification,
+);
+// Document middleware: ledgerEntry.updateOne() / ledgerEntry.deleteOne()
+ledgerSchema.pre(
+  ["updateOne", "deleteOne"],
+  { document: true, query: false },
+  preventLedgerModification,
+);
+// bulkWrite bypasses query middleware, so only allow it to insert new entries
+ledgerSchema.pre("bulkWrite", function (ops) {
+  if (ops.some((op) => !op.insertOne)) {
+    preventLedgerModification();
+  }
+});
 
 const ledgerModel = mongoose.model("ledger", ledgerSchema);
 

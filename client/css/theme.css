@@ -1,0 +1,59 @@
+/* Light theme by default. Dark applies when the OS prefers it (unless the user
+   picked light), or when the user picked dark with the toggle. */
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --on-primary: #ffffff;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --error: #dc2626;
+  --error-soft: #fee2e2;
+  --notice: #eff6ff;
+  --radius: 10px;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111318;
+    --surface: #1a1d24;
+    --surface-2: #22262f;
+    --border: #2c313c;
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --primary: #60a5fa;
+    --primary-hover: #93c5fd;
+    --on-primary: #0b0d12;
+    --success: #4ade80;
+    --success-soft: #14321f;
+    --error: #f87171;
+    --error-soft: #3b1a1a;
+    --notice: #1c2533;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111318;
+  --surface: #1a1d24;
+  --surface-2: #22262f;
+  --border: #2c313c;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --primary: #60a5fa;
+  --primary-hover: #93c5fd;
+  --on-primary: #0b0d12;
+  --success: #4ade80;
+  --success-soft: #14321f;
+  --error: #f87171;
+  --error-soft: #3b1a1a;
+  --notice: #1c2533;
+}

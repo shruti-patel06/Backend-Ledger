@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>History · Backend Ledger</title>
+  <script src="../js/theme.js"></script>
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/transactions.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="page-head">
+      <h1>Transaction history</h1>
+      <p class="muted">Every payment in and out, grouped by month. Click a transaction to see its details.</p>
+    </section>
+
+    <div class="filter-chips" id="account-filter" role="group" aria-label="Filter by account"></div>
+
+    <section class="card history-card" aria-label="Transactions">
+      <div id="history-list"></div>
+      <p class="empty" id="history-empty" hidden>No transactions yet. Once you send or receive money, it will show up here.</p>
+      <p class="msg error" id="history-error"></p>
+      <button type="button" id="load-more" class="secondary load-more" hidden>Load more</button>
+    </section>
+  </main>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/transactions-ui.js"></script>
+  <script src="../js/history.js"></script>
+  <script>
+    loadHistoryPage();
+    document.getElementById("load-more").addEventListener("click", loadNextPage);
+  </script>
+</body>
+</html>

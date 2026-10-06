@@ -1,0 +1,96 @@
+/* ---- Navbar ---- */
+
+.navbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Full width, so the brand sits at the left edge and the controls at the right edge.
+   (Page content below stays centred in a narrower column.) */
+.navbar-inner {
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  gap: 16px;
+}
+
+.nav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.nav-links a:hover,
+.nav-links a[aria-current="page"] {
+  color: var(--text);
+}
+
+.nav-links a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ---- Layout ---- */
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.page-head p {
+  margin: 4px 0 0;
+}
+
+.see-all {
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.site-footer {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 0 16px 24px;
+}
+
+.site-footer a {
+  color: var(--text-muted);
+}

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home · Backend Ledger</title>
+  <script src="../js/theme.js"></script>
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/dashboard.css" />
+  <link rel="stylesheet" href="../css/transactions.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="page-head">
+      <h1 id="greeting">Home</h1>
+      <p class="muted" id="intro">Open an account, get funds from the Treasury, then send money to another account.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Your accounts</h2>
+        <button type="button" class="small" id="create-account-btn">+ New account</button>
+      </div>
+      <ul class="accounts-list" id="accounts-list"></ul>
+      <p class="hint">Share an account ID with someone so they can send you money.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Recent transactions</h2>
+        <a href="history.html" class="see-all">See all</a>
+      </div>
+      <div id="recent-list"></div>
+      <p class="empty" id="recent-empty" hidden>No transactions yet. Money you send or receive will show up here.</p>
+    </section>
+
+    <section class="card">
+      <h2>Send money</h2>
+      <form id="transfer-form" novalidate>
+        <label for="fromAccount">From</label>
+        <select id="fromAccount" required></select>
+        <p class="hint" id="available-hint"></p>
+
+        <label for="toAccount">To (recipient's account ID)</label>
+        <input type="text" id="toAccount" required placeholder="Paste the account ID" autocomplete="off" spellcheck="false" />
+
+        <label for="amount">Amount (₹)</label>
+        <input type="number" id="amount" min="0.01" step="0.01" required inputmode="decimal" />
+
+        <p class="msg" id="transfer-msg" role="alert"></p>
+        <button type="submit" class="block" id="transfer-btn">Send</button>
+      </form>
+    </section>
+
+    <section class="card" id="seed-card" hidden>
+      <h2>Issue funds (Treasury)</h2>
+      <p class="hint">You are the Treasury, the only user who can create new money. Your own balance goes negative by the amount you issue.</p>
+      <form id="seed-form" novalidate>
+        <label for="seedToAccount">To (account ID)</label>
+        <input type="text" id="seedToAccount" required placeholder="Account ID to fund" autocomplete="off" spellcheck="false" />
+
+        <label for="seedAmount">Amount (₹)</label>
+        <input type="number" id="seedAmount" min="0.01" step="0.01" required inputmode="decimal" />
+
+        <p class="msg" id="seed-msg" role="alert"></p>
+        <button type="submit" class="block" id="seed-btn">Issue funds</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/transactions-ui.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>
+    loadDashboard();
+  </script>
+</body>
+</html>

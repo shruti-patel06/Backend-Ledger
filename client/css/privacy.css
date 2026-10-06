@@ -1,0 +1,15 @@
+/* ---- Privacy page ---- */
+
+.prose {
+  line-height: 1.7;
+}
+
+.prose h1 {
+  margin-top: 0;
+  font-size: 22px;
+}
+
+.prose h2 {
+  margin-top: 24px;
+  font-size: 17px;
+}

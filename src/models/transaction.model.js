@@ -38,6 +38,11 @@ const transactionSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+// History query: "transactions from OR to my accounts, newest first" - each side of the $or
+// can then walk an index already in sorted order instead of sorting in memory
+transactionSchema.index({ fromAccount: 1, createdAt: -1, _id: -1 });
+transactionSchema.index({ toAccount: 1, createdAt: -1, _id: -1 });
+
 const transactionModel = mongoose.model("transaction", transactionSchema);
 
 module.exports = transactionModel;

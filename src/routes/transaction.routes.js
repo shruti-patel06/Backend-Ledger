@@ -10,6 +10,18 @@ const transactionRoutes = Router();
 transactionRoutes.post("/",authMiddleware.authMiddleware,transactionController.createTransaction);
 
 /**
+ * GET /api/transactions/
+ * -Transaction history of the logged in user (cursor paginated)
+ */
+transactionRoutes.get("/",authMiddleware.authMiddleware,transactionController.getTransactionHistory);
+
+/**
+ * GET /api/transactions/summary
+ * -Sent/received totals per month
+ */
+transactionRoutes.get("/summary",authMiddleware.authMiddleware,transactionController.getTransactionSummary);
+
+/**
  *  -POST /api/transactions/system/initial-funds
  *  -create Initial Funds from system user
  */

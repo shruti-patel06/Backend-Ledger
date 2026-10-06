@@ -37,6 +37,15 @@ async function apiRequest(path, { method = "GET", body } = {}) {
 
   const data = await res.json().catch(() => ({}));
 
+  // Logged-in request rejected (token expired, revoked, or user deleted):
+  // send the user back to log in instead of leaving the page half broken.
+  // Auth routes are excluded - a 401 there just means wrong email/password.
+  if (res.status === 401 && token && !path.startsWith("/api/auth/")) {
+    clearSession();
+    window.location.href = "login.html?reason=expired";
+    return new Promise(() => {}); // page is navigating away
+  }
+
   if (!res.ok) {
     throw new Error(data.message || `Request failed with status ${res.status}`);
   }
