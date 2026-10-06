@@ -75,17 +75,7 @@ REFRESH_TOKEN=
 
 # Optional: restrict CORS to your deployed frontend. Unset = any origin allowed.
 CLIENT_URL=
-```
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `MONGO_URI` | Yes | MongoDB connection string (must be a replica set) |
-| `JWT_SECRET` | Yes | Secret used to sign login tokens |
-| `SYSTEM_USER_EMAIL`, `SYSTEM_USER_PASSWORD` | For the demo | Treasury login that can issue funds. Without them, nobody can put money into the system |
-| `SYSTEM_USER_NAME` | No | Treasury display name (default `Ledger Treasury`) |
-| `EMAIL_USER`, `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN` | No | Gmail OAuth2 for notification emails |
-| `CLIENT_URL` | No | Locks CORS to the frontend's URL |
-| `PORT` | No | Server port (default `3000`) |
 
 ### 3. Run the backend
 
@@ -95,7 +85,6 @@ npm run dev      # with auto-restart (nodemon)
 npm start        # plain node
 ```
 
-The API runs on `http://localhost:3000`. `GET /` returns a status message.
 
 ### 4. Run the frontend
 
@@ -220,19 +209,4 @@ The backend and frontend deploy separately:
 - Once the frontend is live, set `CLIENT_URL` on the backend to its URL to restrict CORS.
 - Email may not work on free hosting tiers that block SMTP. Transfers still succeed; only the notification fails.
 
-## Known limitations
 
-- Amounts are stored as floating-point numbers. A production ledger would use integer minor units (paise).
-- There are no automated tests yet. The race demo above is the executable check for the transfer logic.
-- No rate limiting on login and no `helmet` security headers.
-- Transaction statuses `FAILED` and `REVERSED` exist in the schema, but nothing produces them yet: there's no reversal endpoint.
-- Each transfer sums the sender's whole ledger to get the balance. That's fine at this scale; a cached balance with an atomic guard is the next step for large volumes.
-- No password reset or email verification.
-
-## Roadmap ideas
-
-- Tamper-evident ledger (each entry hashes the previous one, plus a verify endpoint)
-- Reversals and refunds as new opposite ledger entries
-- Real-time balance updates (server-sent events)
-- Pay by handle or QR code instead of pasting account IDs
-- Multi-currency accounts with an exchange account
