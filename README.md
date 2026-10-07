@@ -1,10 +1,10 @@
 # Vault Ledger
 
-A money-transfer app where users hold accounts and send money to each other.
+A money-transfer app where users open accounts and send money to each other, with balances and history updating live as payments arrive.
 
-Instead of keeping a "balance" number that gets edited, it records every transfer as two entries in a history: money out of one account and money into another. An account's balance is always added up from that history, so it can't drift out of sync and every rupee can be traced. This is called a **double-entry ledger**, the same idea accountants use.
+Instead of storing a balance, it records every transfer as two entries (money out, money in) and adds them up, so balances can't drift and every rupee is traceable. This is called a **double-entry ledger**.
 
-Built with an Express + MongoDB API and a plain HTML/CSS/JS frontend (no build step).
+Transfers are all-or-nothing, safe to retry, and can't overdraw an account even when sent at the same moment. Built with Express, MongoDB and a plain HTML/CSS/JS frontend.
 
 ## Why it's built this way
 
@@ -16,6 +16,8 @@ Built with an Express + MongoDB API and a plain HTML/CSS/JS frontend (no build s
 - **Money enters the system in one place.** A system ("Treasury") user issues initial funds, and its account goes negative by exactly the amount issued, so it always mirrors the total money in the system.
 - **Logout really logs out.** Tokens are JWTs backed by a blacklist, so a token is rejected after logout.
 - **Pages update live.** When someone pays you, your balance and history change on their own, with no refresh. See [Live updates](#live-updates).
+
+For a system diagram and a step-by-step walkthrough of a transfer, see [Architecture.md](Architecture.md).
 
 ## Tech stack
 
