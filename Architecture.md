@@ -4,7 +4,7 @@ How Vault Ledger is put together, and what happens step by step when someone sen
 
 ## System diagram
 
-![Vault Ledger architecture: the browser on Vercel talks to the Express API on Render, which stores data in MongoDB Atlas, sends email through Gmail, and pushes live updates back to the browser over an SSE stream](docs/architecture.png)
+<img src="docs/architecture.png" width="600" alt="Vault Ledger architecture: the browser on Vercel talks to the Express API on Render, which stores data in MongoDB Atlas, sends email through Gmail, and pushes live updates back to the browser over an SSE stream">
 
 - **Solid arrows** are the request path. The JSON response travels back the same way.
 - **Dashed arrows** happen after the database commit, outside the request path: the live-update event and the confirmation email.
